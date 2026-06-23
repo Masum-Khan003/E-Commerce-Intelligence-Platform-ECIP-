@@ -1,0 +1,157 @@
+{
+  "expectation_suite_name": "retail_suite",
+  "ge_cloud_id": null,
+  "expectations": [
+    {
+      "expectation_type": "expect_table_columns_to_match_set",
+      "kwargs": {
+        "column_set": [
+          "Invoice",
+          "StockCode",
+          "Description",
+          "Quantity",
+          "InvoiceDate",
+          "Price",
+          "Customer ID",
+          "Country"
+        ],
+        "exact_match": false
+      },
+      "meta": {
+        "gate": "G1",
+        "description": "Required columns present"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Invoice"
+      },
+      "meta": {
+        "gate": "G1",
+        "description": "Invoice cannot be null"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "InvoiceDate"
+      },
+      "meta": {
+        "gate": "G1",
+        "description": "InvoiceDate cannot be null"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Customer ID",
+        "mostly": 0.7
+      },
+      "meta": {
+        "gate": "G2",
+        "description": "CustomerID null rate < 30% expected. Guest checkouts excluded in tabular_pipeline.py"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Quantity",
+        "min_value": -10000,
+        "max_value": 100000
+      },
+      "meta": {
+        "gate": "G3",
+        "description": "Quantity within plausible range"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Price",
+        "min_value": 0,
+        "max_value": 50000,
+        "mostly": 0.99
+      },
+      "meta": {
+        "gate": "G3",
+        "description": "Price non-negative (99%)"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "Quantity",
+        "min_value": 1,
+        "max_value": 100000,
+        "mostly": 0.9
+      },
+      "meta": {
+        "gate": "G3",
+        "description": "90% of quantities are positive (returns expected)"
+      }
+    },
+    {
+      "expectation_type": "expect_compound_columns_to_be_unique",
+      "kwargs": {
+        "column_list": [
+          "Invoice",
+          "StockCode"
+        ]
+      },
+      "meta": {
+        "gate": "G4",
+        "description": "No duplicate Invoice+StockCode pairs"
+      }
+    },
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 10000,
+        "max_value": 2000000
+      },
+      "meta": {
+        "gate": "G5",
+        "description": "Row count within expected range for UCI dataset"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "InvoiceDate",
+        "min_value": "2009-01-01",
+        "max_value": "2012-12-31",
+        "mostly": 0.999
+      },
+      "meta": {
+        "gate": "G6",
+        "description": "InvoiceDate within dataset date range"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "Country"
+      },
+      "meta": {
+        "gate": "G7",
+        "description": "Country present \u2014 required for UK scope filter"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "InvoiceDate"
+      },
+      "meta": {
+        "gate": "G8",
+        "description": "InvoiceDate present \u2014 required for causal integrity check. Full G8 enforced in tabular_pipeline.py and test_cross_module.py"
+      }
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "0.18.19",
+    "project": "E-CIP v3.0",
+    "blueprint_section": "08"
+  }
+}
