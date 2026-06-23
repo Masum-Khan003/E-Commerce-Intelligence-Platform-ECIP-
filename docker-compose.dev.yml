@@ -1,0 +1,59 @@
+# docker-compose.dev.yml
+# Bootstrap stack — PostgreSQL + Redis + MLflow only.
+# API and Celery services are added in Phase 5.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecip_postgres
+    environment:
+      POSTGRES_DB: ecip
+      POSTGRES_USER: ecip
+      POSTGRES_PASSWORD: ecip_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecip -d ecip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecip_redis
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.1
+    container_name: ecip_mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlruns/mlflow.db
+      --default-artifact-root /mlruns/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  pgdata: {}

@@ -1,0 +1,45 @@
+# dvc.yaml
+# E-CIP v3.0 — Data Pipeline DAG
+# Stages are defined here as skeletons.
+# Scripts are implemented in Phases 1-4.
+# Run: dvc repro <stage_name> to execute a specific stage.
+# Run: dvc repro to execute all stages in dependency order.
+
+stages:
+  download_datasets:
+    cmd: python data/scripts/download.py
+    deps:
+      - data/scripts/download.py
+    outs:
+      - data/raw/products10k/
+      - data/raw/amazon_reviews/
+      - data/raw/online_retail2/
+      - data/raw/semeval2014/
+
+  image_pipeline:
+    cmd: python data/pipelines/image_pipeline.py
+    deps:
+      - data/raw/products10k/
+      - data/pipelines/image_pipeline.py
+    outs:
+      - data/processed/images/
+      - data/feature_store/product_features/
+
+  text_pipeline:
+    cmd: python data/pipelines/text_pipeline.py
+    deps:
+      - data/raw/amazon_reviews/
+      - data/pipelines/text_pipeline.py
+    outs:
+      - data/processed/reviews/
+      - data/feature_store/artifacts/tokenizer_v1/
+
+  tabular_pipeline:
+    cmd: python data/pipelines/tabular_pipeline.py
+    deps:
+      - data/raw/online_retail2/
+      - data/pipelines/tabular_pipeline.py
+    outs:
+      - data/processed/tabular/
+      - data/feature_store/customer_features/
+      - data/reference_distributions/
