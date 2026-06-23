@@ -1,0 +1,54 @@
+# .github/workflows/ci.yml
+# E-CIP v3.0 — Continuous Integration Pipeline
+# Runs on every push and pull request to main.
+# Phase 0: skeleton with pip caching and basic checks.
+# Expanded in Phase 5 with model tests and integration tests.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # v3 Fix #34: pip caching keyed by pyproject.toml hash.
+      # Reduces CI time from ~20 min to ~4 min on warm cache.
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Type check with mypy
+        run: mypy . --ignore-missing-imports
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v --timeout=30
+        continue-on-error: true  # No unit tests yet — removed in Phase 1
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --timeout=60
+        continue-on-error: true  # No integration tests yet — removed in Phase 2
