@@ -1,0 +1,127 @@
+# .github/workflows/model_retrain.yml
+# E-CIP v3.0 — Model Retraining Pipeline
+# Blueprint Section 15 — Fix #44
+#
+# Steps: download data -> GE structure check -> Optuna search -> train ->
+# calibrate -> promotion gate -> promote (log) or open a GitHub Issue.
+#
+# Adapted from the blueprint's spec to this repo's actual scripts:
+#   - No DVC remote is populated with real data in this environment, so
+#     data acquisition is the real wget download (same one Stage 1 used),
+#     not `dvc pull`.
+#   - There's no mlops/model_registry.py MLflow promotion CLI in this
+#     build (out of scope) — mlops/promotion_gate.py checks the same
+#     thresholds (AUC >= 0.87, ECE < 0.05) against real training/
+#     calibration output and is what this workflow branches on.
+#   - "Promote" here means logging the model version as the current
+#     Production candidate — there's no live MLflow Model Registry
+#     server with stage transitions wired up to promote *to*.
+
+name: Model Retraining Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: "Module to retrain"
+        required: true
+        default: "retention"
+      trigger_reason:
+        description: "drift_alert | scheduled | manual"
+        required: true
+        default: "manual"
+  repository_dispatch:
+    types: [drift-alert]
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-train-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install train dependencies
+        run: pip install -e ".[train]"
+
+      - name: Download UCI Online Retail II
+        run: |
+          mkdir -p data/raw/online_retail2
+          wget -q "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip" \
+            -P data/raw/online_retail2/
+          cd data/raw/online_retail2 && unzip -o "online+retail+ii.zip"
+
+      - name: Verify GE framework structure
+        run: python data/validation/setup_ge.py
+
+      - name: Engineer churn labels
+        run: python models/retention/churn_label_engineer.py
+
+      - name: Generate demo sentiment features
+        run: python data/scripts/synthesize_demo_sentiment.py
+
+      - name: Run tabular pipeline
+        run: python data/pipelines/tabular_pipeline.py
+
+      - name: Optuna search (50 trials, resumable)
+        run: |
+          python mlops/optuna_search.py --n-trials 50 \
+            --data data/feature_store/customer_features/rfm_behavioral_v2.parquet
+
+      - name: Train ensemble
+        run: |
+          python models/retention/train.py \
+            --data data/feature_store/customer_features/rfm_behavioral_v2.parquet
+
+      - name: Calibrate
+        run: |
+          python models/retention/calibrate.py \
+            --data data/feature_store/customer_features/rfm_behavioral_v2.parquet
+
+      - name: Run cross-module model tests
+        run: pytest tests/model_tests/ -v --timeout=120
+
+      - name: Promotion gate check
+        id: gate
+        run: python mlops/promotion_gate.py --module ${{ inputs.module }} --github-output
+
+      - name: Log promotion
+        if: steps.gate.outputs.promotion_approved == 'true'
+        run: |
+          echo "Promotion approved for module ${{ inputs.module }} \
+            (trigger: ${{ inputs.trigger_reason }})"
+          cat models/retention/artifacts/training_metrics.json
+
+      - name: Open GitHub Issue on gate failure
+        if: steps.gate.outputs.promotion_approved == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Retrain gate failed: ${{ inputs.module }}`,
+              body: `Trigger: ${{ inputs.trigger_reason }}\n\nSee the promotion gate check step logs for the failing metric(s).`,
+            })
+
+      - name: Upload training artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-training-artifacts
+          path: |
+            models/retention/artifacts/
+            mlops/artifacts/
+          retention-days: 14
