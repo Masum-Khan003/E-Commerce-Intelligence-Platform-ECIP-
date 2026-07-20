@@ -3,7 +3,7 @@ Name: ecip
 Version: 3.0.0
 Summary: E-Commerce Intelligence Platform — Production ML System
 Requires-Python: >=3.12
-Requires-Dist: numpy>=1.26
+Requires-Dist: numpy>=2.0
 Requires-Dist: pandas>=2.2
 Requires-Dist: scikit-learn>=1.4
 Requires-Dist: scipy>=1.12
@@ -23,15 +23,18 @@ Requires-Dist: setfit>=1.0; extra == "train"
 Requires-Dist: xgboost>=2.0; extra == "train"
 Requires-Dist: lightgbm>=4.3; extra == "train"
 Requires-Dist: imbalanced-learn>=0.12; extra == "train"
-Requires-Dist: shap>=0.44; extra == "train"
+Requires-Dist: shap>=0.52; extra == "train"
+Requires-Dist: matplotlib>=3.8; extra == "train"
 Requires-Dist: grad-cam>=1.5; extra == "train"
 Requires-Dist: optuna>=3.6; extra == "train"
 Requires-Dist: mlflow>=2.12; extra == "train"
-Requires-Dist: great-expectations>=0.18; extra == "train"
+Requires-Dist: great-expectations>=1.0; extra == "train"
 Requires-Dist: dvc>=3.49; extra == "train"
+Requires-Dist: openpyxl>=3.1; extra == "train"
 Provides-Extra: api
 Requires-Dist: fastapi>=0.110; extra == "api"
 Requires-Dist: uvicorn[standard]>=0.28; extra == "api"
+Requires-Dist: python-multipart>=0.0.9; extra == "api"
 Requires-Dist: celery[redis]>=5.3; extra == "api"
 Requires-Dist: redis>=5.0; extra == "api"
 Requires-Dist: asyncpg>=0.29; extra == "api"
@@ -44,17 +47,18 @@ Requires-Dist: timm>=0.9; extra == "api"
 Requires-Dist: transformers>=4.39; extra == "api"
 Requires-Dist: xgboost>=2.0; extra == "api"
 Requires-Dist: lightgbm>=4.3; extra == "api"
-Requires-Dist: shap>=0.44; extra == "api"
+Requires-Dist: shap>=0.52; extra == "api"
 Requires-Dist: mlflow>=2.12; extra == "api"
 Provides-Extra: dev
 Requires-Dist: pytest>=8; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
 Requires-Dist: pytest-cov>=5; extra == "dev"
+Requires-Dist: pytest-timeout>=2.3; extra == "dev"
 Requires-Dist: httpx>=0.27; extra == "dev"
 Requires-Dist: ruff>=0.3; extra == "dev"
 Requires-Dist: mypy>=1.9; extra == "dev"
 Requires-Dist: pre-commit>=3.7; extra == "dev"
 Requires-Dist: optuna>=3.6; extra == "dev"
 Requires-Dist: mlflow>=2.12; extra == "dev"
-Requires-Dist: great-expectations>=0.18; extra == "dev"
+Requires-Dist: great-expectations>=1.0; extra == "dev"
 Requires-Dist: dvc>=3.49; extra == "dev"

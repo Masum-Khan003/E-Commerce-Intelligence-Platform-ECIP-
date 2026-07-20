@@ -1,8 +1,15 @@
 # .github/workflows/ci.yml
 # E-CIP v3.0 — Continuous Integration Pipeline
 # Runs on every push and pull request to main.
-# Phase 0: skeleton with pip caching and basic checks.
-# Expanded in Phase 5 with model tests and integration tests.
+# Phase 5 (Week 15): unit/integration/model tests are real now — the
+# continue-on-error stubs from Phase 0 are gone. Postgres + Redis service
+# containers are provisioned below so integration tests exercise the real
+# bcrypt/asyncpg/Redis auth path, not a mock. tests/model_tests/ still
+# skips gracefully (pytest.mark.skipif) here — it needs the retention
+# ensemble actually trained, which is what .github/workflows/model_retrain.yml
+# does; running full training on every push would blow past Fix #34's
+# fast-CI goal for no benefit, since model_retrain.yml is where those
+# tests are enforced for real, right after a fresh training run.
 
 name: CI
 
@@ -16,6 +23,30 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ecip
+          POSTGRES_USER: ecip
+          POSTGRES_PASSWORD: ecip_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecip -d ecip"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout code
@@ -36,8 +67,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dev dependencies
-        run: pip install -e ".[dev]"
+      - name: Install dev + api dependencies
+        run: pip install -e ".[dev,api]"
+
+      - name: Apply database schema
+        run: PGPASSWORD=ecip_dev psql -h localhost -U ecip -d ecip -f db/schema.sql
 
       - name: Lint with ruff
         run: ruff check .
@@ -47,8 +81,9 @@ jobs:
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --timeout=30
-        continue-on-error: true  # No unit tests yet — removed in Phase 1
 
       - name: Run integration tests
         run: pytest tests/integration/ -v --timeout=60
-        continue-on-error: true  # No integration tests yet — removed in Phase 2
+
+      - name: Run model tests (skips if retention models aren't trained)
+        run: pytest tests/model_tests/ -v --timeout=120

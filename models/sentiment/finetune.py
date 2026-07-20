@@ -193,8 +193,22 @@ def head_tail_tokenize(
 
 # ─── Dataset ──────────────────────────────────────────────────────────────────
 
-class ReviewDataset:
-    """PyTorch Dataset for Amazon Reviews."""
+try:
+    from torch.utils.data import Dataset as _TorchDataset
+except ImportError:
+    _TorchDataset = object  # type: ignore[assignment,misc]
+
+
+class ReviewDataset(_TorchDataset):  # type: ignore[misc]
+    """
+    PyTorch Dataset for Amazon Reviews.
+
+    Inherits from torch.utils.data.Dataset when torch is installed so
+    DataLoader's type stubs resolve correctly; falls back to a plain
+    object base when torch isn't available, preserving this module's
+    "structure verified without GPU deps" pattern (train.py's __main__
+    prints a stub message rather than requiring torch just to import).
+    """
 
     def __init__(
         self,
