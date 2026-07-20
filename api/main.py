@@ -209,7 +209,7 @@ def _register_routers() -> None:
     from fastapi import Depends
 
     from api.middleware.auth import verify_api_key
-    from api.routers import analytics, explain, products, retention, sentiment
+    from api.routers import analytics, drift, explain, products, retention, review_queue, sentiment
 
     auth_dep = [Depends(verify_api_key)]
     app.include_router(products.router, dependencies=auth_dep)
@@ -217,6 +217,8 @@ def _register_routers() -> None:
     app.include_router(retention.router, dependencies=auth_dep)
     app.include_router(explain.router, dependencies=auth_dep)
     app.include_router(analytics.router, dependencies=auth_dep)
+    app.include_router(review_queue.router, dependencies=auth_dep)
+    app.include_router(drift.router, dependencies=auth_dep)
 
 
 _register_routers()

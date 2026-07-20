@@ -135,7 +135,16 @@ async def write_drift_events(
     results: dict[str, dict[str, Any]],
     reference_version: str = "v1",
 ) -> int:
-    """Write drift check results to the drift_events PostgreSQL table."""
+    """
+    Write drift check results to the drift_events PostgreSQL table.
+    Drifted features also get a review_queue row (trigger='drift_alert') —
+    one of the three trigger types db/schema.sql documents for that table
+    ('low_confidence' | 'ood_flagged' | 'drift_alert'), so a real drift
+    check gives the Review Queue dashboard page real content instead of
+    an eternally-empty table.
+    """
+    import json as _json
+
     import asyncpg
 
     conn = await asyncpg.connect(POSTGRES_DSN)
@@ -158,6 +167,18 @@ async def write_drift_events(
                 reference_version,
             )
             written += 1
+
+            if metrics["drift_detected"]:
+                await conn.execute(
+                    """
+                    INSERT INTO review_queue (request_id, module, trigger, payload)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    f"drift_{module}_{feature_name}",
+                    module,
+                    "drift_alert",
+                    _json.dumps({"feature": feature_name, **metrics}),
+                )
     finally:
         await conn.close()
 
