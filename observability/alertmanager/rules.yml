@@ -1,0 +1,104 @@
+# observability/alertmanager/rules.yml
+# E-CIP v3.0 — Prometheus Alerting Rules
+# Blueprint Section 14
+#
+# Six rules, one per observability/prometheus/metrics.py metric that
+# warrants an alert. Loaded by Prometheus via `rule_files:` in
+# prometheus.yml, evaluated against the /metrics endpoint api/main.py
+# exposes, and routed through Alertmanager.
+
+groups:
+  - name: ecip_slo_alerts
+    rules:
+      # Three separate rules, one per module's SLO (blueprint §17/§25:
+      # retention 12ms, product 120ms, sentiment 50ms), each at 1.5x —
+      # a single parameterised rule would need a static per-module SLO
+      # metric this build doesn't expose, so the thresholds are inlined.
+      - alert: HighInferenceLatencyRetention
+        expr: |
+          histogram_quantile(0.95, sum(rate(ecip_inference_latency_seconds_bucket{module="retention"}[5m])) by (le)) > 0.018
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Retention P95 latency exceeds 1.5x SLO (12ms)"
+          description: "Retention P95 latency has been above 18ms for 5 minutes."
+
+      - alert: HighInferenceLatencyProduct
+        expr: |
+          histogram_quantile(0.95, sum(rate(ecip_inference_latency_seconds_bucket{module="product"}[5m])) by (le)) > 0.18
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Product P95 latency exceeds 1.5x SLO (120ms)"
+          description: "Product P95 latency has been above 180ms for 5 minutes."
+
+      - alert: HighInferenceLatencySentiment
+        expr: |
+          histogram_quantile(0.95, sum(rate(ecip_inference_latency_seconds_bucket{module="sentiment"}[5m])) by (le)) > 0.075
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sentiment P95 latency exceeds 1.5x SLO (50ms)"
+          description: "Sentiment P95 latency has been above 75ms for 5 minutes."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[2m])) / sum(rate(http_requests_total[2m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate above 5%"
+          description: "5xx error rate has exceeded 5% for 2 minutes — investigate immediately."
+
+      - alert: FeatureDriftDetected
+        expr: ecip_feature_drift_total > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feature drift detected on {{ $labels.feature }}"
+          description: >-
+            PSI exceeded threshold (0.2) for feature {{ $labels.feature }} —
+            triggers mlops/beat_schedule.py's daily drift check review;
+            repeated firings across days should prompt a retraining run via
+            .github/workflows/model_retrain.yml.
+
+      - alert: ReviewQueueBacklog
+        expr: ecip_review_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Review queue depth above 50"
+          description: "{{ $value }} items pending human review for over 5 minutes."
+
+      - alert: SlowModelWarmup
+        expr: ecip_model_warmup_seconds > 90
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model warm-up took longer than 90 seconds"
+          description: >-
+            The FastAPI startup warm-up sequence took {{ $value }}s — check
+            for disk I/O contention or an oversized model artifact.
+
+      # NOT WIRED: celery_queue_length has no exporter in this build.
+      # Celery doesn't expose Prometheus metrics natively — a sidecar like
+      # celery-exporter (a separate container) would need to be added to
+      # docker-compose.yml to back this rule with a real metric. Left here
+      # per the blueprint's spec, disabled until that exporter exists.
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery queue {{ $labels.queue }} backlog above 200"
+          description: >-
+            {{ $value }} tasks pending on queue {{ $labels.queue }} for over
+            5 minutes — signal to scale worker concurrency for that queue.

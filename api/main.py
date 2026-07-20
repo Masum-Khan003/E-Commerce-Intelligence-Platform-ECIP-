@@ -167,6 +167,18 @@ app = FastAPI(title="E-CIP API", version="3.0.0", lifespan=lifespan)
 app.mount("/metrics", make_asgi_app())
 
 
+@app.middleware("http")
+async def _record_http_requests(request: Any, call_next: Any) -> Any:
+    """Backs the Alertmanager HighErrorRate rule with a real metric."""
+    from observability.prometheus.metrics import http_requests_total
+
+    response = await call_next(request)
+    http_requests_total.labels(
+        method=request.method, status=str(response.status_code)
+    ).inc()
+    return response
+
+
 @app.get("/health/live", tags=["Health"])
 async def liveness() -> dict[str, str]:
     """Always 200 — process is up. No auth required."""

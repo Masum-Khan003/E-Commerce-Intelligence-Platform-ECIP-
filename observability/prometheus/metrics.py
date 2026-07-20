@@ -37,6 +37,15 @@ ood_flags_total = Counter(
     "Count of predictions flagged as out-of-distribution",
 )
 
+# Not one of the blueprint's 6 named metrics, but required for the
+# Alertmanager HighErrorRate rule (observability/alertmanager/rules.yml)
+# to be backed by a real metric rather than an invented one.
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests, by method and status code",
+    labelnames=["method", "status"],
+)
+
 review_queue_depth = Gauge(
     "ecip_review_queue_depth",
     "Current count of pending items in the human review queue",
