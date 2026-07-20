@@ -1,0 +1,10 @@
+{
+  "calibration_method": "isotonic_regression",
+  "ece_before": 0.044442628482258065,
+  "ece_after": 0.014112009048423552,
+  "decision_threshold": 0.33,
+  "fbeta": 0.9442589635651037,
+  "precision_at_threshold": 0.8270820089001907,
+  "recall_at_threshold": 0.9789315274642588,
+  "n_calibration_samples": 3923
+}
