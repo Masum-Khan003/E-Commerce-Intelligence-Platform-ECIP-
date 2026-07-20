@@ -34,6 +34,11 @@ models/**/*.pkl
 models/**/*.joblib
 models/**/*.cbm
 
+# Runtime upload/Grad-CAM storage (api/storage/image_store.py — Docker
+# volume-mounted at deploy time, never committed)
+storage/uploads/
+storage/gradcam/
+
 # Notebooks
 notebooks/.ipynb_checkpoints/
 *.ipynb_checkpoints/

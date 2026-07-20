@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from models.retention.shap_explain import (
@@ -279,36 +280,20 @@ async def _log_prediction(
         pass
 
 
-# ─── Endpoint ─────────────────────────────────────────────────────────────────
-
-@router.post(
-    "/score",
-    response_model=RetentionScoreResponse,
-    summary="Score a customer's churn risk",
-    description=(
-        "Score a customer's 90-day churn probability from RFM/behavioural/"
-        "sentiment features. Returns a calibrated probability, risk band, "
-        "recommended action, and top-3 SHAP risk factors."
-    ),
-)
-async def score_retention(
+def _compute_score(
     request: CustomerFeaturesRequest,
-    model_registry: dict[str, Any] = Depends(get_model_registry),
-) -> RetentionScoreResponse:
-    t0 = time.time()
-    request_id = f"req_{uuid.uuid4().hex[:8]}"
-
-    xgb_model = model_registry.get("xgb_final")
-    lgbm_model = model_registry.get("lgbm_final")
-    calibrator = model_registry.get("calibrator")
-    feature_columns = model_registry.get("feature_columns")
-
-    if xgb_model is None or lgbm_model is None or calibrator is None or not feature_columns:
-        raise HTTPException(
-            status_code=503,
-            detail="Retention models not loaded — run models/retention/train.py "
-                   "and models/retention/calibrate.py first.",
-        )
+    model_registry: dict[str, Any],
+) -> tuple[Any, float, str, str, str, float, list[RiskFactor]]:
+    """
+    All CPU-bound work for one score: scaling, ensemble predict_proba,
+    calibration, SHAP. Synchronous by design — called via
+    asyncio.to_thread so it doesn't block the event loop (see
+    score_retention's docstring comment for why this matters).
+    """
+    xgb_model = model_registry["xgb_final"]
+    lgbm_model = model_registry["lgbm_final"]
+    calibrator = model_registry["calibrator"]
+    feature_columns = model_registry["feature_columns"]
 
     features = request.model_dump(exclude={"customer_id"})
     scaler = model_registry.get("scaler")
@@ -323,9 +308,7 @@ async def score_retention(
     decision_threshold = float(calib_metrics.get("decision_threshold", 0.5))
 
     if calibration_method == "platt_scaling":
-        calibrated = float(
-            calibrator.predict_proba(np.array([[ensemble_proba]]))[0, 1]
-        )
+        calibrated = float(calibrator.predict_proba(np.array([[ensemble_proba]]))[0, 1])
     else:
         calibrated = float(calibrator.predict(np.array([ensemble_proba]))[0])
 
@@ -348,6 +331,50 @@ async def score_retention(
             for f in ranked
         ]
 
+    return row, calibrated, risk_band, recommended_action, calibration_method, decision_threshold, top_risk_factors
+
+
+# ─── Endpoint ─────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/score",
+    response_model=RetentionScoreResponse,
+    summary="Score a customer's churn risk",
+    description=(
+        "Score a customer's 90-day churn probability from RFM/behavioural/"
+        "sentiment features. Returns a calibrated probability, risk band, "
+        "recommended action, and top-3 SHAP risk factors."
+    ),
+)
+async def score_retention(
+    request: CustomerFeaturesRequest,
+    background_tasks: BackgroundTasks,
+    model_registry: dict[str, Any] = Depends(get_model_registry),
+) -> RetentionScoreResponse:
+    t0 = time.time()
+    request_id = f"req_{uuid.uuid4().hex[:8]}"
+
+    xgb_model = model_registry.get("xgb_final")
+    lgbm_model = model_registry.get("lgbm_final")
+    calibrator = model_registry.get("calibrator")
+    feature_columns = model_registry.get("feature_columns")
+
+    if xgb_model is None or lgbm_model is None or calibrator is None or not feature_columns:
+        raise HTTPException(
+            status_code=503,
+            detail="Retention models not loaded — run models/retention/train.py "
+                   "and models/retention/calibrate.py first.",
+        )
+
+    # predict_proba/SHAP are CPU-bound and synchronous — running them inline
+    # in this `async def` would block the event loop for their full
+    # duration, serializing every concurrent request through one thread.
+    # A k6 load test at 20 VUs measured p95 latency in the *seconds* before
+    # this fix (SLO target: 12ms) — asyncio.to_thread lets FastAPI actually
+    # interleave concurrent requests instead of queuing them one at a time.
+    computed = await asyncio.to_thread(_compute_score, request, model_registry)
+    row, calibrated, risk_band, recommended_action, calibration_method, decision_threshold, top_risk_factors = computed
+
     _cache_explanation(request_id, row, request.customer_id)
 
     elapsed = time.time() - t0
@@ -357,7 +384,11 @@ async def score_retention(
 
     record_inference("retention", elapsed, calibrated)
 
-    await _log_prediction(
+    # Logging is fire-and-forget — a Postgres round-trip has no business
+    # being on the response's critical path. Scheduled after the response
+    # is sent (FastAPI BackgroundTasks), not awaited here.
+    background_tasks.add_task(
+        _log_prediction,
         request_id=request_id,
         module="retention",
         model_version=MODEL_VERSION,

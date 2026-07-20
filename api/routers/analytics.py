@@ -70,3 +70,47 @@ async def get_overview() -> OverviewResponse:
         by_module=by_module,
         model_versions=model_versions,
     )
+
+
+class RiskBandCount(BaseModel):
+    risk_band: str
+    count: int
+
+
+class RetentionAnalyticsResponse(BaseModel):
+    risk_band_distribution: list[RiskBandCount]
+    total_scored: int
+
+
+@router.get("/retention", response_model=RetentionAnalyticsResponse)
+async def get_retention_analytics() -> RetentionAnalyticsResponse:
+    """
+    Risk band distribution, read via the JSONB path db/schema.sql already
+    indexes for exactly this query (idx_pred_risk_band).
+    """
+    try:
+        import asyncpg
+
+        conn = await asyncpg.connect(POSTGRES_DSN)
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT prediction->>'risk_band' AS risk_band, COUNT(*) AS count
+                FROM prediction_logs
+                WHERE module = 'retention'
+                GROUP BY prediction->>'risk_band'
+                ORDER BY count DESC
+                """
+            )
+        finally:
+            await conn.close()
+    except Exception:
+        rows = []
+
+    distribution = [
+        RiskBandCount(risk_band=row["risk_band"], count=row["count"]) for row in rows
+    ]
+    return RetentionAnalyticsResponse(
+        risk_band_distribution=distribution,
+        total_scored=sum(r.count for r in distribution),
+    )
