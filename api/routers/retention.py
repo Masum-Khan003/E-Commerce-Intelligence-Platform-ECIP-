@@ -310,7 +310,12 @@ async def score_retention(
 
     _cache_explanation(request_id, row, request.customer_id)
 
-    inference_ms = int((time.time() - t0) * 1000)
+    elapsed = time.time() - t0
+    inference_ms = int(elapsed * 1000)
+
+    from observability.prometheus.metrics import record_inference
+
+    record_inference("retention", elapsed, calibrated)
 
     return RetentionScoreResponse(
         request_id=request_id,

@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from prometheus_client import make_asgi_app
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     elapsed = time.time() - start
     logger.info(f"Warm-up sequence complete in {elapsed:.1f}s — status: {_load_status}")
 
+    from observability.prometheus.metrics import model_warmup_seconds
+
+    model_warmup_seconds.observe(elapsed)
+
     yield
 
     model_registry.clear()
@@ -159,6 +164,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="E-CIP API", version="3.0.0", lifespan=lifespan)
+app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/health/live", tags=["Health"])
