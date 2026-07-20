@@ -13,6 +13,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 # DVC
 /tmp/ecip-dvc-storage/
