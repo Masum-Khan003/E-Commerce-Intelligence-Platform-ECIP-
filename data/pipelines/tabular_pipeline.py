@@ -42,6 +42,7 @@ PROCESSED_DIR = Path("data/processed/tabular")
 FEATURE_STORE_DIR = Path("data/feature_store/customer_features")
 ARTIFACTS_DIR = Path("data/feature_store/artifacts")
 REFERENCE_DIR = Path("data/reference_distributions")
+TEXT_FEATURES_DIR = Path("data/feature_store/text_features")
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -297,6 +298,96 @@ def build_sentiment_placeholders(customer_ids: pd.Series) -> pd.DataFrame:
     })
 
 
+# ─── Step 6b: Real sentiment merge (Phase 4, Week 11) ─────────────────────────
+
+NEGATIVE_SENTIMENT_THRESHOLD = -0.3
+
+
+def merge_sentiment_features(
+    customer_ids: pd.Series,
+    review_sentiment_path: Path,
+    aspect_sentiment_path: Path,
+    snapshot_date: pd.Timestamp = SNAPSHOT_DATE,
+) -> pd.DataFrame:
+    """
+    Merge Module 2 sentiment output onto the customer feature table.
+
+    Blueprint Section 06 — Gate G8 causal integrity: only reviews dated
+    strictly before snapshot_date may inform features used to predict
+    churn at that snapshot. This filter is applied explicitly here rather
+    than trusted from upstream, since it is the single most important
+    data-leakage guard in Module 3.
+
+    NOTE: for this dataset the review-level inputs are SYNTHETIC —
+    see data/scripts/synthesize_demo_sentiment.py and
+    models/retention/model_card.md "Known Limitations". The merge logic
+    itself (this function) is production-shaped: it is what would run
+    against real Module 2 output if UK retail customers and Amazon
+    reviewers were the same population.
+    """
+    review_df = pd.read_parquet(review_sentiment_path)
+    aspect_df = pd.read_parquet(aspect_sentiment_path)
+
+    review_df["review_date"] = pd.to_datetime(review_df["review_date"])
+    aspect_df["review_date"] = pd.to_datetime(aspect_df["review_date"])
+
+    # Gate G8: strictly before snapshot_date — never equal, never after.
+    review_df = review_df[review_df["review_date"] < snapshot_date].copy()
+    aspect_df = aspect_df[aspect_df["review_date"] < snapshot_date].copy()
+
+    # Document-level aggregation
+    doc_agg = review_df.groupby("CustomerID").agg(
+        avg_sentiment_score=("sentiment_score", "mean"),
+        negative_review_count=("sentiment_score", lambda s: int((s < NEGATIVE_SENTIMENT_THRESHOLD).sum())),
+    )
+    last_review = (
+        review_df.sort_values("review_date")
+        .groupby("CustomerID")["sentiment_score"]
+        .last()
+        .rename("last_review_sentiment")
+    )
+    doc_agg = doc_agg.join(last_review)
+    doc_agg["has_reviews"] = 1
+    doc_agg = doc_agg.reset_index()
+
+    # Aspect-level aggregation — pivot mean sentiment per aspect per customer
+    aspect_pivot = (
+        aspect_df.groupby(["CustomerID", "aspect"])["aspect_sentiment"]
+        .mean()
+        .unstack("aspect")
+        .rename(columns={
+            "battery": "avg_battery_sentiment",
+            "shipping": "avg_shipping_sentiment",
+            "price": "avg_price_sentiment",
+        })
+        .reset_index()
+    )
+
+    sentiment = pd.DataFrame({"CustomerID": customer_ids})
+    sentiment = sentiment.merge(doc_agg, on="CustomerID", how="left")
+    sentiment = sentiment.merge(aspect_pivot, on="CustomerID", how="left")
+
+    fill_values = {
+        "avg_sentiment_score": 0.0,
+        "last_review_sentiment": 0.0,
+        "negative_review_count": 0,
+        "has_reviews": 0,
+        "avg_battery_sentiment": 0.0,
+        "avg_shipping_sentiment": 0.0,
+        "avg_price_sentiment": 0.0,
+    }
+    for col, default in fill_values.items():
+        if col not in sentiment.columns:
+            sentiment[col] = default
+    sentiment = sentiment.fillna(fill_values)
+
+    n_with_reviews = int(sentiment["has_reviews"].sum())
+    print(f"  Sentiment merge: {n_with_reviews:,} / {len(sentiment):,} customers "
+          f"have a pre-snapshot review (Gate G8 enforced)")
+
+    return sentiment
+
+
 # ─── Step 7: Assemble feature table ───────────────────────────────────────────
 
 def assemble_feature_table(
@@ -434,6 +525,8 @@ def run_pipeline(
     input_path: Path,
     lambda_decay: float = TIME_DECAY_LAMBDA_DEFAULT,
     churn_labels_path: Path | None = None,
+    review_sentiment_path: Path | None = None,
+    aspect_sentiment_path: Path | None = None,
 ) -> None:
     """
     Full tabular pipeline:
@@ -442,12 +535,12 @@ def run_pipeline(
     3. Compute RFM features
     4. Compute behavioural features (NaN-safe)
     5. Compute temporal features (lambda as parameter)
-    6. Build sentiment placeholders (populated Phase 4)
+    6. Merge real sentiment features (Gate G8) if available, else placeholders
     7. Assemble master feature table
     8. Join churn labels (if available)
     9. Save reference distributions
     10. Fit and save scaler artifact
-    11. Save feature table to Parquet
+    11. Save feature table to Parquet (rfm_behavioral_v2 if sentiment merged, else v1)
     """
     print("=" * 60)
     print("  E-CIP v3.0 — Tabular Pipeline")
@@ -486,9 +579,21 @@ def run_pipeline(
     print(f"\n  Computing temporal features (lambda={lambda_decay})...")
     temporal = compute_temporal_features(obs_df, lambda_decay)
 
-    # Step 6: Sentiment placeholders
-    print("\n  Building sentiment placeholders (populated in Phase 4)...")
-    sentiment = build_sentiment_placeholders(rfm["CustomerID"])
+    # Step 6: Real sentiment merge (Gate G8) if available, else placeholders
+    sentiment_is_real = bool(
+        review_sentiment_path and review_sentiment_path.exists()
+        and aspect_sentiment_path and aspect_sentiment_path.exists()
+    )
+    if sentiment_is_real:
+        print("\n  Merging sentiment features (Gate G8 — review_date < snapshot_date)...")
+        assert review_sentiment_path is not None
+        assert aspect_sentiment_path is not None
+        sentiment = merge_sentiment_features(
+            rfm["CustomerID"], review_sentiment_path, aspect_sentiment_path
+        )
+    else:
+        print("\n  Building sentiment placeholders (no sentiment feature files found)...")
+        sentiment = build_sentiment_placeholders(rfm["CustomerID"])
 
     # Step 7: Load churn labels if available
     churn_labels = None
@@ -518,7 +623,8 @@ def run_pipeline(
     FEATURE_STORE_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
-    parquet_path = FEATURE_STORE_DIR / "rfm_behavioral_v1.parquet"
+    feature_version = "v2" if sentiment_is_real else "v1"
+    parquet_path = FEATURE_STORE_DIR / f"rfm_behavioral_{feature_version}.parquet"
     features.to_parquet(parquet_path, index=False)
     print(f"\n  ✓ Feature table saved: {parquet_path}")
 
@@ -586,11 +692,26 @@ def main() -> None:
         help=f"Time decay lambda (default: {TIME_DECAY_LAMBDA_DEFAULT}, "
              "Optuna tunes in Phase 4)",
     )
+    parser.add_argument(
+        "--review-sentiment",
+        type=Path,
+        default=TEXT_FEATURES_DIR / "review_sentiment_v1.parquet",
+        help="Path to review-level sentiment scores (Module 2 output or "
+             "data/scripts/synthesize_demo_sentiment.py for this dataset)",
+    )
+    parser.add_argument(
+        "--aspect-sentiment",
+        type=Path,
+        default=TEXT_FEATURES_DIR / "aspect_sentiment_v1.parquet",
+        help="Path to aspect-level sentiment scores",
+    )
     args = parser.parse_args()
 
     run_pipeline(
         input_path=args.input,
         lambda_decay=args.lambda_decay,
+        review_sentiment_path=args.review_sentiment,
+        aspect_sentiment_path=args.aspect_sentiment,
         churn_labels_path=args.churn_labels,
     )
 

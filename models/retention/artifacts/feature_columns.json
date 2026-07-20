@@ -1,0 +1,21 @@
+[
+  "frequency",
+  "monetary_value",
+  "recency_days",
+  "tenure_days",
+  "avg_order_value",
+  "recency_days_log",
+  "purchase_gap_cv",
+  "category_diversity",
+  "is_single_purchase",
+  "return_rate",
+  "purchase_trend",
+  "time_decay_weight",
+  "avg_sentiment_score",
+  "negative_review_count",
+  "last_review_sentiment",
+  "has_reviews",
+  "avg_battery_sentiment",
+  "avg_price_sentiment",
+  "avg_shipping_sentiment"
+]

@@ -1,14 +1,13 @@
 {
-  "n_estimators": 300,
-  "max_depth": 6,
-  "learning_rate": 0.05,
-  "subsample": 0.8,
-  "colsample_bytree": 0.8,
+  "n_estimators": 336,
+  "max_depth": 5,
+  "learning_rate": 0.04700811219694038,
+  "subsample": 0.8162061636528439,
+  "colsample_bytree": 0.586226390630203,
   "min_child_weight": 3,
-  "gamma": 0.1,
-  "reg_alpha": 0.1,
-  "reg_lambda": 1.0,
-  "time_decay_lambda": 0.1,
-  "random_state": 42,
-  "status": "default \u2014 run Optuna search with UCI data"
+  "gamma": 4.5708498219825255,
+  "reg_alpha": 0.25386720504616467,
+  "reg_lambda": 4.437445423141182,
+  "time_decay_lambda": 0.0640359745662954,
+  "best_cv_auc": 0.9146444316391568
 }

@@ -1,0 +1,33 @@
+{
+  "xgb_cv_auc_mean": 0.9137526871935202,
+  "xgb_cv_auc_std": 0.014919004452913463,
+  "lgbm_cv_auc_mean": 0.905481431241622,
+  "lgbm_cv_auc_std": 0.015213273095833186,
+  "ensemble_cv_auc": 0.911786626694861,
+  "xgb_weight": 0.5,
+  "xgb_model_path": "models/retention/weights/xgb_final.joblib",
+  "lgbm_model_path": "models/retention/weights/lgbm_final.joblib",
+  "feature_columns": [
+    "frequency",
+    "monetary_value",
+    "recency_days",
+    "tenure_days",
+    "avg_order_value",
+    "recency_days_log",
+    "purchase_gap_cv",
+    "category_diversity",
+    "is_single_purchase",
+    "return_rate",
+    "purchase_trend",
+    "time_decay_weight",
+    "avg_sentiment_score",
+    "negative_review_count",
+    "last_review_sentiment",
+    "has_reviews",
+    "avg_battery_sentiment",
+    "avg_price_sentiment",
+    "avg_shipping_sentiment"
+  ],
+  "n_samples": 3923,
+  "churn_rate": 0.6775426969156257
+}
