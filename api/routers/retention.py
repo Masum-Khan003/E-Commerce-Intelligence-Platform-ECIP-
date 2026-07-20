@@ -239,6 +239,46 @@ def _cache_explanation(request_id: str, row: Any, customer_id: str) -> None:
     _EXPLANATION_CACHE[request_id] = (row, customer_id)
 
 
+POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+
+
+async def _log_prediction(
+    request_id: str,
+    module: str,
+    model_version: str,
+    prediction: dict[str, Any],
+    latency_ms: int,
+) -> None:
+    """
+    Writes to prediction_logs — the table the dashboard's Overview page
+    (Stage 6) aggregates over. Best-effort: a logging failure must never
+    break the actual prediction response.
+    """
+    try:
+        import asyncpg
+
+        conn = await asyncpg.connect(POSTGRES_DSN)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO prediction_logs
+                    (request_id, module, model_version, input_hash, prediction, latency_ms)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (request_id) DO NOTHING
+                """,
+                request_id,
+                module,
+                model_version,
+                request_id,  # no raw-feature hash computed yet; request_id is unique enough here
+                json.dumps(prediction),
+                latency_ms,
+            )
+        finally:
+            await conn.close()
+    except Exception:
+        pass
+
+
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post(
@@ -316,6 +356,18 @@ async def score_retention(
     from observability.prometheus.metrics import record_inference
 
     record_inference("retention", elapsed, calibrated)
+
+    await _log_prediction(
+        request_id=request_id,
+        module="retention",
+        model_version=MODEL_VERSION,
+        prediction={
+            "churn_probability": round(calibrated, 4),
+            "risk_band": risk_band,
+            "recommended_action": recommended_action,
+        },
+        latency_ms=inference_ms,
+    )
 
     return RetentionScoreResponse(
         request_id=request_id,
