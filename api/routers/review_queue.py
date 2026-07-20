@@ -8,12 +8,15 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 
 router = APIRouter(prefix="/v1/review-queue", tags=["Review Queue"])
 

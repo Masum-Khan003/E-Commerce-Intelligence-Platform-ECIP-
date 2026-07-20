@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,9 @@ KS_ALPHA = 0.05
 
 REFERENCE_DIST_PATH = Path("data/reference_distributions/customer_features_ref_v1.json")
 FEATURE_TABLE_PATH = Path("data/feature_store/customer_features/rfm_behavioral_v2.parquet")
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 
 
 def compute_psi(ref: dict[str, float], current: Any) -> float:

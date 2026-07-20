@@ -9,10 +9,14 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 
 router = APIRouter(prefix="/v1/analytics", tags=["Analytics"])
 

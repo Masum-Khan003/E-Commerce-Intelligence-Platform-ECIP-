@@ -254,9 +254,38 @@ prior `/v1/retention/score` call.
 
 ---
 
+## Performance Under Load (Blueprint Section 17)
+
+**Target:** p95 < 12ms @ 20 VUs (`tests/load/retention_slo.js`).
+
+**Measured, single `uvicorn` worker:** p95 ~1.7s. Root cause, found by actually running the
+k6 test rather than assuming the SLO held: `predict_proba` (both models) and the TreeSHAP
+explanation are synchronous, CPU-bound calls inside an `async def` endpoint — they blocked
+FastAPI's event loop for their full duration, serializing all 20 concurrent virtual users
+through one thread. Prediction logging was also a synchronous Postgres round-trip on the
+response's critical path.
+
+**Fixed in `api/routers/retention.py`:** CPU-bound scoring now runs via `asyncio.to_thread`;
+logging is a fire-and-forget `BackgroundTask`. **Re-measured with `uvicorn --workers 4`**
+(true multi-process — the only way to bypass Python's GIL for CPU-bound work): p95 dropped to
+~710ms, throughput went from ~8 req/s to ~40 req/s. A real, verified ~60% latency
+improvement and ~2.5x throughput improvement — confirming horizontal scaling (more worker
+processes) is the correct direction.
+
+**Still short of the 12ms target** on an 8-core dev machine. Two GBM predictions plus a
+TreeSHAP explanation per request is inherently more CPU work than a 12ms budget assumes at
+this concurrency without further scaling (more worker processes than a single dev laptop
+provides) or architectural changes (precomputed/cached SHAP backgrounds). Documented here
+and in `tests/load/retention_slo.js` rather than silently loosening the threshold or the test.
+
+---
+
 ## Changelog
 
 - **v1.0.0** (Phase 4, Weeks 11–13): first real training run against
   downloaded UCI Online Retail II data. Optuna 50-trial search, SMOTE-in-CV
   ensemble training, Isotonic calibration, TreeSHAP explanations, full
   cross-module test suite passing.
+- **v1.0.1** (Phase 6, Week 17): fixed a real concurrency bug found via k6
+  load testing — CPU-bound scoring now runs off the event loop, prediction
+  logging is now a background task. See "Performance Under Load" above.

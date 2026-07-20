@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -240,7 +241,9 @@ def _cache_explanation(request_id: str, row: Any, customer_id: str) -> None:
     _EXPLANATION_CACHE[request_id] = (row, customer_id)
 
 
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 
 
 async def _log_prediction(

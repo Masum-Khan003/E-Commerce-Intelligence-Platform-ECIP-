@@ -13,9 +13,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import secrets
 
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 
 
 def create_api_key(name: str) -> str:

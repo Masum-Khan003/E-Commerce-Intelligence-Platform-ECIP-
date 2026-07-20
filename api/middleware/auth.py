@@ -9,13 +9,16 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
 
-REDIS_URL = "redis://localhost:6379/1"
-POSTGRES_DSN = "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+REDIS_URL = os.environ.get("REDIS_URL_AUTH", "redis://localhost:6379/1")
+POSTGRES_DSN = os.environ.get(
+    "POSTGRES_DSN", "postgresql://ecip:ecip_dev@localhost:5432/ecip"
+)
 CACHE_TTL_SECONDS = 300  # Fix #14: 5-minute Redis cache
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)

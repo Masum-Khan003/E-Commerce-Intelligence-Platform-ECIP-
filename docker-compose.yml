@@ -1,0 +1,134 @@
+# docker-compose.yml
+# E-CIP v3.0 — Full Production Stack
+# Blueprint Section 17/23 — 8 services, mem_limits per the resource budget
+# in models' README/model cards (~4GB peak, 6GB host minimum).
+#
+# docker-compose.dev.yml (postgres+redis+mlflow only) remains the
+# lightweight option for local development without the API/Celery/
+# observability services.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecip_postgres
+    environment:
+      POSTGRES_DB: ecip
+      POSTGRES_USER: ecip
+      POSTGRES_PASSWORD: ecip_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecip -d ecip"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecip_redis
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: ecip_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      REDIS_URL_AUTH: redis://redis:6379/1
+      POSTGRES_DSN: postgresql://ecip:ecip_dev@postgres:5432/ecip
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./mlops/artifacts:/app/mlops/artifacts
+      - ./models/retention/weights:/app/models/retention/weights
+      - ./models/retention/artifacts:/app/models/retention/artifacts
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  celery_gpu:
+    build: .
+    container_name: ecip_celery_gpu
+    command: celery -A api.workers.celery_tasks worker -Q gpu_queue --concurrency=1 --pool=solo
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    mem_limit: 2g
+
+  celery_cpu:
+    build: .
+    container_name: ecip_celery_cpu
+    command: celery -A api.workers.celery_tasks worker -Q cpu_queue --concurrency=4 --pool=prefork
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_DSN: postgresql://ecip:ecip_dev@postgres:5432/ecip
+    volumes:
+      - ./models/retention/weights:/app/models/retention/weights
+      - ./models/retention/artifacts:/app/models/retention/artifacts
+    mem_limit: 1g
+
+  celery_beat:
+    build: .
+    container_name: ecip_celery_beat
+    command: celery -A mlops.beat_schedule beat --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_DSN: postgresql://ecip:ecip_dev@postgres:5432/ecip
+    mem_limit: 256m
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ecip_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/alertmanager/rules.yml:/etc/prometheus/alertmanager_rules.yml
+    mem_limit: 256m
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecip_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    mem_limit: 256m
+
+volumes:
+  pgdata: {}
