@@ -38,13 +38,31 @@ RAW = Path("data/raw")
 
 DATASETS: list[Dataset] = [
     # ── Module 1 — Product Intelligence ──────────────────────────────────────
+    # Products-10K (18.3GB) was the original blueprint choice but is too large
+    # to move to a free-tier Colab (15GB Drive quota). Its full-resolution
+    # replacement (paramaggarwal/fashion-product-images-dataset, 24.7GB) has
+    # the same problem. Fix: this "Small" variant shares the same product IDs
+    # and subCategory/masterCategory/articleType labels but ships 60x80px
+    # thumbnails (too small for image_pipeline.py's MIN_DIMENSION_PX=64 gate
+    # and EfficientNet-B3's 300x300 input) — it's downloaded only to read
+    # styles.csv. Actual training images are then pulled at full resolution,
+    # per-ID, capped per class, via
+    # data/scripts/download_fullres_fashion_subset.py (run after this).
     Dataset(
-        name="Products-10K",
+        name="Fashion Product Images (Small) — labels only, see script header",
+        method="kaggle",
+        target="paramaggarwal/fashion-product-images-small",
+        dest=RAW / "fashion_product_images_small",
+        module=1,
+        required=True,
+    ),
+    Dataset(
+        name="Products-10K (original, too large for free-tier Colab)",
         method="kaggle",
         target="hirune924/products10k",
         dest=RAW / "products10k",
         module=1,
-        required=True,
+        required=False,
     ),
     Dataset(
         name="FEIDEGGER (Zalando)",
@@ -52,7 +70,7 @@ DATASETS: list[Dataset] = [
         target="https://github.com/zalandoresearch/feidegger.git",
         dest=RAW / "feidegger",
         module=1,
-        required=False,  # Backup — only needed if Products-10K fails
+        required=False,  # Single-category (dresses), no class labels — text/image research only
     ),
 
     # ── Module 2 — Sentiment Intelligence ────────────────────────────────────

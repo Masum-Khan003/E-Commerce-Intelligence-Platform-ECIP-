@@ -12,7 +12,7 @@
 # Usage:
 #   python data/pipelines/image_pipeline.py
 #   python data/pipelines/image_pipeline.py --sample-only
-#   python data/pipelines/image_pipeline.py --input data/raw/products10k
+#   python data/pipelines/image_pipeline.py --input data/raw/fashion_product_images_fullres/by_category
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from pathlib import Path
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
-RAW_DIR = Path("data/raw/products10k")
+RAW_DIR = Path("data/raw/fashion_product_images_fullres/by_category")
 PROCESSED_DIR = Path("data/processed/images")
 SAMPLES_DIR = Path("data/samples/images")
 FEATURE_STORE_DIR = Path("data/feature_store/product_features")

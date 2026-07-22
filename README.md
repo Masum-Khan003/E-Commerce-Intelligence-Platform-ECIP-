@@ -1,12 +1,33 @@
 # E-CIP — E-Commerce Intelligence Platform
 
-A production-grade, end-to-end ML system with three intelligent modules behind a single
-FastAPI backend and a Next.js operations dashboard: automated product image classification,
-transformer-based review sentiment + aspect analysis, and explainable customer retention
-(churn) prediction.
+## Project Objective
 
-Built solo against a 47-gap-hardened production blueprint. See [`HANDOFF.md`](HANDOFF.md) for
-the full build history and current status of every module.
+E-CIP is a solo-built, production-grade ML platform that demonstrates end-to-end machine
+learning engineering — not just model notebooks, but the full lifecycle: data validation,
+training, calibration, explainability, serving, observability, and a live operations
+dashboard. It follows an 18-week phased build against a 47-gap "blueprint fix" hardening
+pass (documented decisions, not shortcuts).
+
+## Scope
+
+Three intelligent modules behind a single FastAPI backend and a Next.js operations
+dashboard:
+
+1. **Product Intelligence** — EfficientNet-B3 image classifier for product category
+   prediction, with Grad-CAM explainability and Mahalanobis-distance OOD detection.
+2. **Sentiment Intelligence** — DistilBERT fine-tuned for review sentiment + zero-shot NLI
+   aspect-based sentiment analysis (ABSA).
+3. **Retention Prediction** — XGBoost + LightGBM ensemble on RFM/behavioral features,
+   calibrated and SHAP-explained, predicting 90-day customer churn.
+
+Supporting infrastructure: PostgreSQL prediction logging, Redis-cached bcrypt auth, Celery
+task queues, Prometheus/Alertmanager observability, feature drift detection (PSI/KS), and a
+Next.js dashboard with a BFF proxy so the API key never reaches the browser.
+
+> **Current status: Product and Sentiment need one remaining step — GPU training on
+> Colab/Kaggle.** Everything else (data pipelines, training/eval code, API serving paths,
+> dashboard, tests, infra) is built and verified. Retention is fully trained on real data.
+> See [`HANDOFF.md`](HANDOFF.md) for the exact next steps and full build history.
 
 ## Architecture
 
@@ -45,11 +66,11 @@ artifacts → served by `api/main.py`'s warm-up loader.
 | Module | Status | Real metrics |
 |---|---|---|
 | **Retention** (XGBoost + LightGBM) | Trained on real data | CV ROC-AUC 0.912, calibrated ECE 0.014 — see [model card](models/retention/model_card.md) |
-| **Product** (EfficientNet-B3) | Structure complete, GPU training pending | — see [model card](models/product/model_card.md) |
-| **Sentiment** (DistilBERT + ABSA) | Structure complete, GPU training pending | — see [model card](models/sentiment/model_card.md) |
+| **Product** (EfficientNet-B3) | Structure complete, **GPU training pending** | — see [model card](models/product/model_card.md) |
+| **Sentiment** (DistilBERT + ABSA) | Structure complete, **GPU training pending** | — see [model card](models/sentiment/model_card.md) |
 
-Product and Sentiment require GPU training on Colab/Kaggle (see `HANDOFF.md` §14) — out of
-scope for a local session. Retention is CPU-only and fully trained end-to-end against the
+Product and Sentiment require GPU training on Colab/Kaggle (see `HANDOFF.md` §7) — out of
+scope for a local CPU session. Retention is CPU-only and fully trained end-to-end against the
 real [UCI Online Retail II](https://archive.ics.uci.edu/dataset/502/online+retail+ii) dataset.
 
 ## Local setup
@@ -91,6 +112,15 @@ cp .env.local.example .env.local   # fill in ECIP_API_KEY from step 5
 npm run dev
 # -> http://localhost:3000
 ```
+
+## Training Product and Sentiment (GPU required)
+
+Not runnable locally — both need a GPU. Full step-by-step instructions (dataset prep,
+Colab bootstrap cells, training commands, evaluation gates, bringing weights back into the
+repo) are in [`HANDOFF.md` §7](HANDOFF.md). Once the two weight files exist at
+`models/product/weights/efficientnet_b3_best.pt` and
+`models/sentiment/weights/distilbert_sentiment_best.pt`, the API's warm-up loader and the
+dashboard pick them up automatically — no code changes needed.
 
 ## Tests
 
