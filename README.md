@@ -1,5 +1,14 @@
 # E-CIP — E-Commerce Intelligence Platform
 
+[![CI](https://github.com/Masum-Khan003/E-Commerce-Intelligence-Platform-ECIP-/actions/workflows/ci.yml/badge.svg)](https://github.com/Masum-Khan003/E-Commerce-Intelligence-Platform-ECIP-/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-blue?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.139-009688?logo=fastapi&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.13-EE4C2C?logo=pytorch&logoColor=white)
+![XGBoost](https://img.shields.io/badge/XGBoost-3.3-005A9C)
+![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/status-2%2F3%20modules%20trained-yellow)
+
 ## Project Objective
 
 E-CIP is a solo-built, production-grade ML platform that demonstrates end-to-end machine
